@@ -9,8 +9,7 @@ class HasPrefixTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** @test */
-    public function it_builds_prefix_from_constants_and_fields()
+    public function test_builds_prefix_from_constants_and_fields(): void
     {
         $o = Order::create([
             'user_name' => 'Asliddin',
@@ -18,40 +17,35 @@ class HasPrefixTest extends TestCase
             'type' => null,
         ]);
 
-        // PREFIX = ORD, FROM = ['id','user_name'], SEP='-'
-        $this->assertSame("ORD-{$o->id}-Asliddin", $o->prefix);
+        self::assertSame("ORD-{$o->id}-Asliddin", $o->prefix);
     }
 
-    /** @test */
-    public function define_prefix_via_overrides_static_prefix_when_truthy()
+    public function test_define_prefix_via_overrides_static_prefix_when_truthy(): void
     {
         $o = Order::create([
             'user_name' => 'Bek',
-            'type' => 'express', // definePrefixVia => EXP
+            'type' => 'express',
         ]);
 
-        $this->assertSame("EXP-{$o->id}-Bek", $o->prefix);
+        self::assertSame("EXP-{$o->id}-Bek", $o->prefix);
     }
 
-    /** @test */
-    public function runtime_resolver_has_highest_priority()
+    public function test_runtime_resolver_has_highest_priority(): void
     {
-        // Runtime resolver: TEST
         Order::resolvePrefixUsing(fn(Order $m) => 'TEST');
 
         $o = Order::create([
             'user_name' => 'Runtime',
-            'type' => 'express', // definePrefixVia => EXP, lekin resolver ustun
+            'type' => 'express',
         ]);
 
-        $this->assertSame("TEST-{$o->id}-Runtime", $o->prefix);
+        self::assertSame("TEST-{$o->id}-Runtime", $o->prefix);
 
-        // Clean up resolver (optional)
+        // clean
         Order::resolvePrefixUsing(fn(Order $m) => null);
     }
 
-    /** @test */
-    public function runtime_setters_change_behavior_on_the_fly()
+    public function test_runtime_setters_change_behavior_on_the_fly(): void
     {
         Order::setPrefix('TMP');
         Order::setPrefixFrom(['slug']);
@@ -62,48 +56,43 @@ class HasPrefixTest extends TestCase
             'user_name' => 'Ignored',
         ]);
 
-        $this->assertSame("TMP:draft-1", $o->prefix);
+        self::assertSame("TMP:draft-1", $o->prefix);
 
-        // restore defaults for other tests
+        // restore
         Order::setPrefix('ORD');
         Order::setPrefixFrom(['id', 'user_name']);
         Order::setPrefixSeparator('-');
     }
 
-    /** @test */
-    public function empty_or_null_fields_are_skipped()
+    public function test_empty_or_null_fields_are_skipped(): void
     {
         $o = Order::create([
-            'user_name' => '', // skip
-            'type' => null, // no definePrefixVia
+            'user_name' => '',
+            'type' => null,
         ]);
 
-        $this->assertSame("ORD-{$o->id}", $o->prefix);
+        self::assertSame("ORD-{$o->id}", $o->prefix);
     }
 
-    /** @test */
-    public function accessor_is_cached_per_instance_invocation()
+    public function test_accessor_is_cached_per_instance_invocation(): void
     {
         $o = Order::create(['user_name' => 'Cache']);
 
-        $first = $o->prefix; // builds and caches
-        // change attribute after cache (same instance) – prefix remains cached
+        $first = $o->prefix;
         $o->user_name = 'Mutated';
         $second = $o->prefix;
 
-        $this->assertSame($first, $second);
-        $this->assertSame("ORD-{$o->id}-Cache", $first);
+        self::assertSame($first, $second);
+        self::assertSame("ORD-{$o->id}-Cache", $first);
     }
 
-    /** @test */
-    public function unsaved_models_work_with_available_fields()
+    public function test_unsaved_models_work_with_available_fields(): void
     {
         $o = new Order([
             'user_name' => 'Draft',
             'slug' => 'draft-slug',
         ]);
 
-        // id null => from = ['id','user_name'] => "ORD--Draft" (id bo'sh)
-        $this->assertSame('ORD--Draft', $o->prefix);
+        self::assertSame('ORD--Draft', $o->prefix);
     }
 }
