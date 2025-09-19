@@ -1,72 +1,99 @@
 #!/bin/bash
-# Version bump script for Simple Prefix (git-tag based)
-# Usage: ./scripts/bump-version.sh [init|patch|minor|major]
-# - init  -> creates v1.0.0 if no semver tag exists yet
-# - patch/minor/major -> bumps from latest vX.Y.Z tag
 
-set -euo pipefail
+# Version bump script for Simple Exception package
+# Usage: ./scripts/bump-version.sh [patch|minor|major]
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
-say()  { echo -e "${BLUE}[INFO]${NC} $*"; }
-ok()   { echo -e "${GREEN}[SUCCESS]${NC} $*"; }
-warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
-fail() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
+set -e
 
-if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  fail "Not a git repository."
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_status() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Check if we're in the right directory
+if [ ! -f "composer.json" ]; then
+    print_error "composer.json not found. Please run this script from the package root directory."
+    exit 1
 fi
 
-BUMP=${1:-patch}
-[[ "$BUMP" =~ ^(init|patch|minor|major)$ ]] || fail "Usage: $0 [init|patch|minor|major]"
+# Get current version
+CURRENT_VERSION=$(grep '"version"' composer.json | sed 's/.*"version": *"\([^"]*\)".*/\1/')
+print_status "Current version: $CURRENT_VERSION"
 
-# latest semver tag (vX.Y.Z)
-LATEST=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1 || true)
+# Determine version bump type
+BUMP_TYPE=${1:-patch}
 
-if [[ -z "$LATEST" ]]; then
-  if [[ "$BUMP" == "init" ]]; then
-    NEW_TAG="v1.0.0"
-    say "No tags found. Initializing $NEW_TAG"
-  else
-    # baseline as 1.0.0 then bump accordingly
-    MA=1; MI=0; PA=0
-    case "$BUMP" in
-      patch) PA=1;;
-      minor) MI=1;;
-      major) MA=2; MI=0; PA=0;;
-    esac
-    NEW_TAG="v$MA.$MI.$PA"
-    say "No tags found. Creating $NEW_TAG"
-  fi
-else
-  CUR="${LATEST#v}"
-  IFS='.' read -r MA MI PA <<<"$CUR"
-  case "$BUMP" in
-    patch) PA=$((PA+1));;
-    minor) MI=$((MI+1)); PA=0;;
-    major) MA=$((MA+1)); MI=0; PA=0;;
-    init)  fail "init is only for repos without tags";;
-  esac
-  NEW_TAG="v$MA.$MI.$PA"
-  say "Current tag: $LATEST"
-  say "New tag:     $NEW_TAG"
+# Validate bump type
+if [[ ! "$BUMP_TYPE" =~ ^(patch|minor|major)$ ]]; then
+    print_error "Invalid bump type. Use: patch, minor, or major"
+    echo "Usage: $0 [patch|minor|major]"
+    exit 1
 fi
 
-# Clean or auto-commit
-if [ -n "$(git status --porcelain)" ]; then
-  warn "Uncommitted changes detected. Committing them..."
-  git add -A
-  git commit -m "chore: prepare $NEW_TAG"
-fi
+# Parse current version
+IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+MAJOR=${VERSION_PARTS[0]}
+MINOR=${VERSION_PARTS[1]}
+PATCH=${VERSION_PARTS[2]}
 
-say "Running tests..."
-composer test
-ok "Tests passed."
+# Calculate new version
+case $BUMP_TYPE in
+    patch)
+        PATCH=$((PATCH + 1))
+        ;;
+    minor)
+        MINOR=$((MINOR + 1))
+        PATCH=0
+        ;;
+    major)
+        MAJOR=$((MAJOR + 1))
+        MINOR=0
+        PATCH=0
+        ;;
+esac
 
-say "Creating tag $NEW_TAG..."
-git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
+NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+print_status "New version: $NEW_VERSION"
 
-say "Pushing commits and tags..."
-git push origin HEAD
-git push origin "$NEW_TAG"
+# Update composer.json
+print_status "Updating composer.json..."
+sed -i.bak "s/\"version\": \"$CURRENT_VERSION\"/\"version\": \"$NEW_VERSION\"/" composer.json
+rm composer.json.bak
 
-ok "Released $NEW_TAG 🎉  Packagist will auto-update."
+# Git operations
+print_status "Committing changes..."
+git add .
+git commit -m "v$NEW_VERSION: Version bump ($BUMP_TYPE)"
+
+print_status "Creating tag v$NEW_VERSION..."
+git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+
+print_status "Pushing to GitHub..."
+git push origin main --tags
+
+print_success "Version $NEW_VERSION successfully released! 🎉"
+print_status "Package is now available at: https://packagist.org/packages/aslnbxrz/simple-prefix"
+
+# Show usage
+echo ""
+print_status "To install the new version:"
+echo "composer require aslnbxrz/simple-prefix:^$NEW_VERSION"
